@@ -12,50 +12,59 @@ connection = pika.BlockingConnection(params)
 
 # Create a Channel
 channel = connection.channel()
-print("Channel over a connection created")
+print('Channel over a connection created')
+
+# List group container
+user_groups = ['hr', 'marketing', 'support']
+
+# Get user group argument from commandline
+user_group = sys.argv[1]
+
+# Validate for user group
+if not user_group:
+    sys.stderr.write('Usage: %s [hr] [marketing] [support]\n' % sys.argv[0])
+    sys.exit(1)
+
+if user_group not in user_groups:
+    sys.stderr.write('Invalid argument - allowed arguments: %s [hr] [marketing] [support]\n' % sys.argv[0])
+    sys.exit(1)
 
 # Declare a queue
-channel.queue_declare(queue='hr_queue')
-channel.queue_declare(queue='marketing_queue')
-channel.queue_declare(queue='support_queue')
+queue_name = user_group + '_queue'
+query_binding_key = user_group
 
+# Declare a exchange, queue and bindings
+channel.exchange_declare(
+    exchange='slack_notifications',
+    exchange_type='direct'
+)
 
-def callback_hr(ch, method, properrties, body):
-    print(f'Recieved #{ body }')
+channel.queue_declare(
+    queue=queue_name
+)
 
-
-channel.basic_consume(
-    'hr_queue',
-    callback_hr,
-    auto_ack=True
+channel.queue_bind(
+    exchange='slack_notifications',
+    queue=queue_name,
+    routing_key=query_binding_key
 )
 
 
-def callback_marketing(ch, method, properrties, body):
+def callback(ch, method, properties, body):
     print(f'Recieved #{ body }')
+    ch.basic_ack(delivery_tag= method.delivery_tag)
 
 
 channel.basic_consume(
-    'marketing_queue',
-    callback_marketing,
-    auto_ack=True
-)
-
-
-def callback_support(ch, method, properrties, body):
-    print(f'Recieved #{ body }')
-
-
-channel.basic_consume(
-    'support_queue',
-    callback_support,
-    auto_ack=True
+    queue_name,
+    callback
 )
 
 
 try:
     print('\n Waiting for mesage. To exit press CTRL+C \n')
     channel.start_consuming()
+
 except Exception as e:
     print(f'Error: #{e}')
     try:
